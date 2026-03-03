@@ -33,4 +33,6 @@ app.listen({ port, host }, (err) => {
     app.log.error(err);
     process.exit(1);
   }
+  // Pre-warm the cache so the first real request is instant
+  getRoutes().catch((e) => app.log.warn("Cache pre-warm failed: " + e.message));
 });
