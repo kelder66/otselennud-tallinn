@@ -27,41 +27,42 @@ interface ApiDestination {
   [key: string]: unknown;
 }
 
-let cache: { routes: Route[]; fetchedAt: number } | null = null;
+// Cache raw API data so date filtering is free (no re-fetch needed)
+let rawCache: { data: ApiDestination[]; fetchedAt: number } | null = null;
 
-export async function getRoutes(): Promise<Route[]> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
-    return cache.routes;
+async function getRawFlights(): Promise<ApiDestination[]> {
+  if (rawCache && Date.now() - rawCache.fetchedAt < CACHE_TTL_MS) {
+    return rawCache.data;
   }
-
-  const routes = await fetchAndBuild();
-  cache = { routes, fetchedAt: Date.now() };
-  return routes;
-}
-
-async function fetchAndBuild(): Promise<Route[]> {
   const res = await fetch(API_URL);
   if (!res.ok) throw new Error(`airport.ee API error: ${res.status}`);
+  const data = (await res.json()) as ApiDestination[];
+  rawCache = { data, fetchedAt: Date.now() };
+  return data;
+}
 
-  const data: ApiDestination[] = await res.json() as ApiDestination[];
+// YYYY-MM-DD substring comparison avoids timezone issues
+function dateStr(iso: string): string {
+  return iso.substring(0, 10);
+}
 
-  // Filter departures only
-  const departures = data.filter((d) => d.direction === "D");
+export async function getRoutes(from?: string, to?: string): Promise<Route[]> {
+  const raw = await getRawFlights();
 
-  // Group by destination city name, collect airlines
-  const cityMap = new Map<
-    string,
-    { items: ApiDestination[]; airlines: Set<string> }
-  >();
+  let departures = raw.filter((d) => d.direction === "D");
+
+  if (from) departures = departures.filter((d) => dateStr(d.start_date) >= from);
+  if (to)   departures = departures.filter((d) => dateStr(d.start_date) <= to);
+
+  // Group by destination city, collect airlines
+  const cityMap = new Map<string, { items: ApiDestination[]; airlines: Set<string> }>();
 
   for (const d of departures) {
     const city = d.destination?.trim();
     if (!city) continue;
     const existing = cityMap.get(city) ?? { items: [], airlines: new Set() };
     existing.items.push(d);
-    if (d.service_provider) {
-      existing.airlines.add(d.service_provider.trim());
-    }
+    if (d.service_provider) existing.airlines.add(d.service_provider.trim());
     cityMap.set(city, existing);
   }
 
@@ -69,17 +70,13 @@ async function fetchAndBuild(): Promise<Route[]> {
 
   for (const [city, { items, airlines }] of cityMap) {
     const sample = items[0];
-
-    // Try to resolve coordinates: by IATA first, then city+country, then city
-    let info =
+    const info =
       (sample.iata ? lookupByIata(sample.iata) : undefined) ??
-      (sample.country
-        ? lookupByCityAndCountry(city, sample.country)
-        : undefined) ??
+      (sample.country ? lookupByCityAndCountry(city, sample.country) : undefined) ??
       lookupByCity(city);
 
     if (!info) {
-      console.warn(`[flights] No coordinates found for: ${city}`);
+      console.warn(`[flights] No coordinates for: ${city}`);
       continue;
     }
 

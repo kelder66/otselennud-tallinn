@@ -13,7 +13,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 18,
 }).addTo(map);
 
-// TLL marker (star / home)
+// TLL marker
 const tllIcon = L.divIcon({
   html: `<div style="
     width:14px;height:14px;
@@ -31,7 +31,6 @@ L.marker(TLL, { icon: tllIcon })
   .addTo(map)
   .bindTooltip("Tallinn (TLL)", { permanent: false });
 
-// Destination marker
 function makeDestIcon() {
   return L.divIcon({
     html: `<div style="
@@ -46,28 +45,67 @@ function makeDestIcon() {
   });
 }
 
-let routes = [];
-let markers = {}; // iata → Leaflet marker
-let lines = []; // Leaflet polylines
+// --- State ---
+let allRoutes = [];   // full result for current date range
+let markers = {};
+let lines = [];
 let activeItem = null;
 
-async function init() {
+// --- Date helpers ---
+function toDateStr(d) {
+  return d.toISOString().split("T")[0];
+}
+
+function initDateDefaults() {
+  const today = new Date();
+  const future = new Date(today);
+  future.setMonth(today.getMonth() + 3);
+  document.getElementById("from-date").value = toDateStr(today);
+  document.getElementById("to-date").value = toDateStr(future);
+}
+
+// --- Data loading ---
+async function loadRoutes() {
+  const from = document.getElementById("from-date").value;
+  const to   = document.getElementById("to-date").value;
+
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to)   params.set("to", to);
+
+  document.getElementById("dest-count").textContent = "laadimine...";
+
   try {
-    const res = await fetch("/api/routes");
+    const res = await fetch("/api/routes?" + params);
     if (!res.ok) throw new Error("API error " + res.status);
-    routes = await res.json();
-    renderSidebar(routes);
-    renderMap(routes);
-    document.getElementById("dest-count").textContent =
-      routes.length + " sihtkohta";
+    allRoutes = await res.json();
+    applySearch();
   } catch (err) {
     document.getElementById("dest-count").textContent = "Viga andmete laadimisel";
     console.error(err);
   }
 }
 
+// --- Apply search filter on top of current allRoutes ---
+function applySearch() {
+  const q = document.getElementById("search").value.toLowerCase().trim();
+  const filtered = q
+    ? allRoutes.filter(
+        (r) =>
+          r.city.toLowerCase().includes(q) ||
+          r.country.toLowerCase().includes(q) ||
+          r.airlines.some((a) => a.toLowerCase().includes(q)) ||
+          r.iata.toLowerCase().includes(q)
+      )
+    : allRoutes;
+
+  renderSidebar(filtered);
+  renderMap(filtered);
+  document.getElementById("dest-count").textContent = filtered.length + " sihtkohta";
+}
+
+// --- Render ---
 function renderMap(routeList) {
-  // Clear previous
   lines.forEach((l) => map.removeLayer(l));
   lines = [];
   Object.values(markers).forEach((m) => map.removeLayer(m));
@@ -75,8 +113,6 @@ function renderMap(routeList) {
 
   for (const r of routeList) {
     const destLatLng = [r.lat, r.lon];
-
-    // Gray line TLL → destination
     const line = L.polyline([TLL, destLatLng], {
       color: "#3a4060",
       weight: 1.5,
@@ -84,7 +120,6 @@ function renderMap(routeList) {
     }).addTo(map);
     lines.push(line);
 
-    // Destination marker
     const marker = L.marker(destLatLng, { icon: makeDestIcon() }).addTo(map);
     marker.bindPopup(popupHtml(r));
     markers[r.iata] = marker;
@@ -103,16 +138,13 @@ function renderSidebar(routeList) {
   const list = document.getElementById("dest-list");
   list.innerHTML = "";
 
-  // Group by country
   const byCountry = {};
   for (const r of routeList) {
     if (!byCountry[r.country]) byCountry[r.country] = [];
     byCountry[r.country].push(r);
   }
 
-  const countries = Object.keys(byCountry).sort();
-
-  for (const country of countries) {
+  for (const country of Object.keys(byCountry).sort()) {
     const group = document.createElement("div");
     group.className = "country-group";
 
@@ -141,7 +173,6 @@ function selectDest(r, itemEl) {
   if (activeItem) activeItem.classList.remove("active");
   activeItem = itemEl;
   itemEl.classList.add("active");
-
   const marker = markers[r.iata];
   if (marker) {
     map.setView([r.lat, r.lon], 7, { animate: true });
@@ -149,27 +180,18 @@ function selectDest(r, itemEl) {
   }
 }
 
-// Search
-document.getElementById("search").addEventListener("input", (e) => {
-  const q = e.target.value.toLowerCase().trim();
-  if (!q) {
-    renderSidebar(routes);
-    renderMap(routes);
-    document.getElementById("dest-count").textContent =
-      routes.length + " sihtkohta";
-    return;
-  }
-  const filtered = routes.filter(
-    (r) =>
-      r.city.toLowerCase().includes(q) ||
-      r.country.toLowerCase().includes(q) ||
-      r.airlines.some((a) => a.toLowerCase().includes(q)) ||
-      r.iata.toLowerCase().includes(q)
-  );
-  renderSidebar(filtered);
-  renderMap(filtered);
-  document.getElementById("dest-count").textContent =
-    filtered.length + " sihtkohta";
+// --- Event listeners ---
+document.getElementById("search").addEventListener("input", applySearch);
+
+document.getElementById("from-date").addEventListener("change", loadRoutes);
+document.getElementById("to-date").addEventListener("change", loadRoutes);
+
+document.getElementById("reset-dates").addEventListener("click", () => {
+  document.getElementById("from-date").value = "";
+  document.getElementById("to-date").value = "";
+  loadRoutes();
 });
 
-init();
+// --- Boot ---
+initDateDefaults();
+loadRoutes();

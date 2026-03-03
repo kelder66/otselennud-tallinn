@@ -17,7 +17,8 @@ app.get("/health", async () => ({ status: "ok" }));
 
 app.get("/api/routes", async (req, reply) => {
   try {
-    const routes = await getRoutes();
+    const { from, to } = req.query as { from?: string; to?: string };
+    const routes = await getRoutes(from, to);
     return reply.send(routes);
   } catch (err) {
     req.log.error(err);

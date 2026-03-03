@@ -156,11 +156,78 @@
       z-index: 1000;
     }
 
+    /* Date filter bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      background: #1e2d4a;
+      border-bottom: 2px solid #4a90d9;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .filter-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #a8c4e8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    .date-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .date-inputs input[type="date"] {
+      padding: 6px 10px;
+      background: #0f1826;
+      border: 1px solid #4a90d9;
+      border-radius: 6px;
+      color: #e8eaf0;
+      font-size: 0.875rem;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .date-inputs input[type="date"]:focus {
+      border-color: #7ab3f0;
+      box-shadow: 0 0 0 2px rgba(74,144,217,0.25);
+    }
+
+    .date-arrow {
+      color: #4a90d9;
+      font-size: 1.1rem;
+    }
+
+    #reset-dates {
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid #3a5070;
+      border-radius: 6px;
+      color: #7c83a0;
+      font-size: 0.8rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    #reset-dates:hover {
+      border-color: #4a90d9;
+      color: #a8c4e8;
+    }
+
     /* Responsive: mobile */
     @media (max-width: 640px) {
       .main { flex-direction: column-reverse; }
       #sidebar { width: 100%; height: 45%; border-right: none; border-top: 1px solid #2a2d3a; }
       #map { height: 55%; }
+      .filter-bar { padding: 8px 12px; }
     }
   </style>
 </head>
@@ -169,6 +236,15 @@
     <h1>Otselennud Tallinnast</h1>
     <span id="dest-count">laadimine...</span>
   </header>
+  <div class="filter-bar">
+    <span class="filter-label">Kuva lennud</span>
+    <div class="date-inputs">
+      <input type="date" id="from-date" />
+      <span class="date-arrow">→</span>
+      <input type="date" id="to-date" />
+    </div>
+    <button id="reset-dates">Näita kõik</button>
+  </div>
   <div class="main">
     <aside id="sidebar">
       <div id="search-wrap">
