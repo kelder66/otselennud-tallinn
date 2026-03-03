@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Otselennud Tallinnast</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      background: #0f1117;
+      color: #e8eaf0;
+    }
+
+    header {
+      padding: 14px 20px;
+      background: #1a1d27;
+      border-bottom: 1px solid #2a2d3a;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    #dest-count {
+      font-size: 0.85rem;
+      color: #7c83a0;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    #sidebar {
+      width: 300px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: #13161f;
+      border-right: 1px solid #2a2d3a;
+      overflow: hidden;
+    }
+
+    #search-wrap {
+      padding: 12px;
+      border-bottom: 1px solid #2a2d3a;
+      flex-shrink: 0;
+    }
+
+    #search {
+      width: 100%;
+      padding: 8px 12px;
+      background: #1e2130;
+      border: 1px solid #2a2d3a;
+      border-radius: 6px;
+      color: #e8eaf0;
+      font-size: 0.875rem;
+      outline: none;
+    }
+
+    #search::placeholder { color: #555a70; }
+    #search:focus { border-color: #4a90d9; }
+
+    #dest-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 8px 0;
+    }
+
+    .country-group { margin-bottom: 4px; }
+
+    .country-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #555a70;
+      padding: 8px 16px 4px;
+    }
+
+    .dest-item {
+      padding: 8px 16px;
+      cursor: pointer;
+      border-radius: 0;
+      transition: background 0.1s;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .dest-item:hover { background: #1e2130; }
+    .dest-item.active { background: #1e2d4a; }
+
+    .dest-city {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #e8eaf0;
+    }
+
+    .dest-airlines {
+      font-size: 0.75rem;
+      color: #7c83a0;
+    }
+
+    /* Map */
+    #map {
+      flex: 1;
+      z-index: 0;
+    }
+
+    /* Leaflet popup overrides */
+    .leaflet-popup-content-wrapper {
+      background: #1a1d27;
+      color: #e8eaf0;
+      border: 1px solid #2a2d3a;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .leaflet-popup-tip { background: #1a1d27; }
+    .popup-city { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+    .popup-country { font-size: 0.8rem; color: #7c83a0; margin-bottom: 6px; }
+    .popup-airlines { font-size: 0.8rem; }
+    .popup-iata {
+      display: inline-block;
+      background: #1e2d4a;
+      color: #4a90d9;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+
+    /* Loading / error */
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #7c83a0;
+      font-size: 0.9rem;
+      z-index: 1000;
+    }
+
+    /* Responsive: mobile */
+    @media (max-width: 640px) {
+      .main { flex-direction: column-reverse; }
+      #sidebar { width: 100%; height: 45%; border-right: none; border-top: 1px solid #2a2d3a; }
+      #map { height: 55%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Otselennud Tallinnast</h1>
+    <span id="dest-count">laadimine...</span>
+  </header>
+  <div class="main">
+    <aside id="sidebar">
+      <div id="search-wrap">
+        <input id="search" type="search" placeholder="Otsi sihtkohta..." autocomplete="off" />
+      </div>
+      <div id="dest-list"></div>
+    </aside>
+    <div id="map"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
