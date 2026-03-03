@@ -11,6 +11,7 @@ export interface Route {
   lat: number;
   lon: number;
   airlines: string[];
+  departures: string[]; // sorted "DD.MM HH:MM" within the requested date range
 }
 
 interface ApiDestination {
@@ -80,6 +81,16 @@ export async function getRoutes(from?: string, to?: string): Promise<Route[]> {
       continue;
     }
 
+    const departures = items
+      .slice()
+      .sort((a, b) => a.start_date.localeCompare(b.start_date))
+      .map((d) => {
+        const day   = d.start_date.substring(8, 10);
+        const month = d.start_date.substring(5, 7);
+        const time  = d.start_date.substring(11, 16);
+        return `${day}.${month} ${time}`;
+      });
+
     routes.push({
       city,
       airport: info.name,
@@ -88,6 +99,7 @@ export async function getRoutes(from?: string, to?: string): Promise<Route[]> {
       lat: info.lat,
       lon: info.lon,
       airlines: [...airlines].sort(),
+      departures,
     });
   }
 

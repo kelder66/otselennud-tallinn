@@ -127,10 +127,15 @@ function renderMap(routeList) {
 }
 
 function popupHtml(r) {
+  const datesBlock = r.departures.length
+    ? `<div class="popup-dates-label">Väljumised</div>
+       <div class="popup-dates">${r.departures.join(", ")}</div>`
+    : "";
   return `
     <div class="popup-city">${r.city} <span class="popup-iata">${r.iata}</span></div>
     <div class="popup-country">${r.country}</div>
     <div class="popup-airlines">${r.airlines.join(", ")}</div>
+    ${datesBlock}
   `;
 }
 
