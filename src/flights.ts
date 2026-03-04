@@ -1,7 +1,15 @@
-import { lookupByIata, lookupByCity, lookupByCityAndCountry } from "./airports.js";
+import {
+  lookupByIata,
+  lookupByCity,
+  lookupByCityAndCountry,
+  lookupByAirportHint,
+} from "./airports.js";
 
-const API_URL = "https://airport.ee/wp-json/airport/v1/destination-data";
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const DEST_DATA_URL = "https://airport.ee/wp-json/airport/v1/destination-data";
+const FLIGHTS_URL   = "https://airport.ee/wp-json/airport/v1/flights?direction=departure";
+
+const CACHE_TTL_MS      = 6 * 60 * 60 * 1000; // 6 h — destination-data (JSON)
+const HTML_CACHE_TTL_MS = 60 * 60 * 1000;      // 1 h — flights HTML (real-time)
 
 export interface Route {
   city: string;
@@ -13,6 +21,8 @@ export interface Route {
   airlines: string[];
   departures: string[]; // sorted "DD.MM HH:MM" within the requested date range
 }
+
+// ─── Source 1: destination-data JSON ─────────────────────────────────────────
 
 interface ApiDestination {
   id: number;
@@ -28,77 +38,189 @@ interface ApiDestination {
   [key: string]: unknown;
 }
 
-// Cache raw API data so date filtering is free (no re-fetch needed)
 let rawCache: { data: ApiDestination[]; fetchedAt: number } | null = null;
 
 async function getRawFlights(): Promise<ApiDestination[]> {
   if (rawCache && Date.now() - rawCache.fetchedAt < CACHE_TTL_MS) {
     return rawCache.data;
   }
-  const res = await fetch(API_URL);
-  if (!res.ok) throw new Error(`airport.ee API error: ${res.status}`);
+  const res = await fetch(DEST_DATA_URL);
+  if (!res.ok) throw new Error(`destination-data API error: ${res.status}`);
   const data = (await res.json()) as ApiDestination[];
   rawCache = { data, fetchedAt: Date.now() };
   return data;
 }
 
-// YYYY-MM-DD substring comparison avoids timezone issues
+// ─── Source 2: flights HTML ───────────────────────────────────────────────────
+
+interface HtmlDeparture {
+  destRaw: string;   // e.g. "Stockholm (Arlanda)"
+  city: string;      // e.g. "Stockholm"
+  hint: string | null; // e.g. "Arlanda"
+  airline: string;
+  datetime: string;  // ISO-ish, e.g. "2026-03-04T15:30:00+02:00"
+}
+
+let htmlCache: { data: HtmlDeparture[]; fetchedAt: number } | null = null;
+
+async function getHtmlFlights(): Promise<HtmlDeparture[]> {
+  if (htmlCache && Date.now() - htmlCache.fetchedAt < HTML_CACHE_TTL_MS) {
+    return htmlCache.data;
+  }
+  try {
+    const res = await fetch(FLIGHTS_URL);
+    if (!res.ok) return htmlCache?.data ?? [];
+    const html = await res.text();
+    const deps = parseFlightsHtml(html);
+    htmlCache = { data: deps, fetchedAt: Date.now() };
+    return deps;
+  } catch {
+    return htmlCache?.data ?? [];
+  }
+}
+
+function parseFlightsHtml(html: string): HtmlDeparture[] {
+  const results: HtmlDeparture[] = [];
+  // Match each card-flight block's key fields in document order
+  const re =
+    /datetime="([^"]+)"[\s\S]{1,600}?card-flight__title">([\s\S]{1,200}?)<\/h2>[\s\S]{1,400}?card-flight__service-providers">([\s\S]{1,200}?)<\/span>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const datetime = m[1].trim();
+    const destRaw  = stripTags(m[2]);
+    const airline  = stripTags(m[3]);
+    if (!destRaw || !datetime) continue;
+
+    const parenM = destRaw.match(/^(.*?)\s*\(([^)]+)\)$/);
+    const city   = parenM ? parenM[1].trim() : destRaw;
+    const hint   = parenM ? parenM[2].trim() : null;
+
+    results.push({ destRaw, city, hint, airline, datetime });
+  }
+  return results;
+}
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]+>/g, "").trim();
+}
+
+// ─── Coordinate lookup ────────────────────────────────────────────────────────
+
+function resolveCoords(
+  city: string,
+  hint: string | null,
+  iata?: string,
+  country?: string
+) {
+  return (
+    (iata ? lookupByIata(iata) : undefined) ??
+    (hint ? lookupByAirportHint(hint) : undefined) ??
+    (country ? lookupByCityAndCountry(city, country) : undefined) ??
+    lookupByCity(city)
+  );
+}
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
 function dateStr(iso: string): string {
   return iso.substring(0, 10);
 }
 
+function formatDep(iso: string): string {
+  const day   = iso.substring(8, 10);
+  const month = iso.substring(5, 7);
+  const time  = iso.substring(11, 16);
+  return `${day}.${month} ${time}`;
+}
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
 export async function getRoutes(from?: string, to?: string): Promise<Route[]> {
-  const raw = await getRawFlights();
+  // Fetch both sources in parallel; HTML failure is non-fatal
+  const [raw, htmlDeps] = await Promise.all([
+    getRawFlights().catch(() => [] as ApiDestination[]),
+    getHtmlFlights(),
+  ]);
 
-  let departures = raw.filter((d) => d.direction === "D");
+  // Key: normalised city name (lowercase). Value: accumulated route data.
+  const cityMap = new Map<
+    string,
+    {
+      city: string;
+      hint: string | null;
+      iata?: string;
+      country?: string;
+      airlines: Set<string>;
+      departures: string[]; // ISO datetimes
+    }
+  >();
 
-  if (from) departures = departures.filter((d) => dateStr(d.start_date) >= from);
-  if (to)   departures = departures.filter((d) => dateStr(d.start_date) <= to);
-
-  // Group by destination city, collect airlines
-  const cityMap = new Map<string, { items: ApiDestination[]; airlines: Set<string> }>();
-
-  for (const d of departures) {
+  // ── Source 1: destination-data JSON ──────────────────────────────────────
+  const departures1 = raw.filter((d) => d.direction === "D");
+  for (const d of departures1) {
     const city = d.destination?.trim();
     if (!city) continue;
-    const existing = cityMap.get(city) ?? { items: [], airlines: new Set() };
-    existing.items.push(d);
-    if (d.service_provider) existing.airlines.add(d.service_provider.trim());
-    cityMap.set(city, existing);
+    // Date filter
+    if (from && dateStr(d.start_date) < from) continue;
+    if (to   && dateStr(d.start_date) > to)   continue;
+
+    const key = city.toLowerCase();
+    const entry = cityMap.get(key) ?? {
+      city,
+      hint: null,
+      iata: d.iata,
+      country: d.country,
+      airlines: new Set<string>(),
+      departures: [],
+    };
+    if (d.service_provider) entry.airlines.add(d.service_provider.trim());
+    entry.departures.push(d.start_date);
+    cityMap.set(key, entry);
   }
 
+  // ── Source 2: flights HTML ────────────────────────────────────────────────
+  for (const d of htmlDeps) {
+    if (from && dateStr(d.datetime) < from) continue;
+    if (to   && dateStr(d.datetime) > to)   continue;
+
+    const key = d.city.toLowerCase();
+    const entry = cityMap.get(key) ?? {
+      city: d.city,
+      hint: d.hint,
+      airlines: new Set<string>(),
+      departures: [],
+    };
+    // Prefer the richer destination name (with airport hint) as display name
+    if (d.hint && !entry.hint) {
+      entry.hint = d.hint;
+    }
+    if (d.airline) entry.airlines.add(d.airline);
+    entry.departures.push(d.datetime);
+    cityMap.set(key, entry);
+  }
+
+  // ── Build Route objects ───────────────────────────────────────────────────
   const routes: Route[] = [];
 
-  for (const [city, { items, airlines }] of cityMap) {
-    const sample = items[0];
-    const info =
-      (sample.iata ? lookupByIata(sample.iata) : undefined) ??
-      (sample.country ? lookupByCityAndCountry(city, sample.country) : undefined) ??
-      lookupByCity(city);
-
+  for (const [, entry] of cityMap) {
+    const info = resolveCoords(entry.city, entry.hint, entry.iata, entry.country);
     if (!info) {
-      console.warn(`[flights] No coordinates for: ${city}`);
+      console.warn(`[flights] No coordinates for: ${entry.city}`);
       continue;
     }
 
-    const departures = items
-      .slice()
-      .sort((a, b) => a.start_date.localeCompare(b.start_date))
-      .map((d) => {
-        const day   = d.start_date.substring(8, 10);
-        const month = d.start_date.substring(5, 7);
-        const time  = d.start_date.substring(11, 16);
-        return `${day}.${month} ${time}`;
-      });
+    const departures = [...new Set(entry.departures)]
+      .sort()
+      .map(formatDep);
 
     routes.push({
-      city,
+      city: entry.city,
       airport: info.name,
       country: info.country,
       iata: info.iata,
       lat: info.lat,
       lon: info.lon,
-      airlines: [...airlines].sort(),
+      airlines: [...entry.airlines].sort(),
       departures,
     });
   }

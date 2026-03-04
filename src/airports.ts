@@ -99,3 +99,18 @@ export function lookupByCityAndCountry(
   );
   return countryMatch ?? candidates[0];
 }
+
+// Look up by airport name substring — used when the API gives hints like
+// "Stockholm (Arlanda)" or "Paris (Charles De Gaulle)".
+// Prefers the shortest matching name to avoid overly generic matches.
+export function lookupByAirportHint(hint: string): AirportInfo | undefined {
+  if (!airportsByIata) loadAirports();
+  const lower = hint.toLowerCase();
+  let best: AirportInfo | undefined;
+  for (const airport of airportsByIata!.values()) {
+    if (airport.name.toLowerCase().includes(lower)) {
+      if (!best || airport.name.length < best.name.length) best = airport;
+    }
+  }
+  return best;
+}
