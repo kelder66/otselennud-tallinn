@@ -17,8 +17,9 @@ app.get("/health", async () => ({ status: "ok" }));
 
 app.get("/api/routes", async (req, reply) => {
   try {
-    const { from, to } = req.query as { from?: string; to?: string };
-    const routes = await getRoutes(from, to);
+    const { from, to, direction } = req.query as { from?: string; to?: string; direction?: string };
+    const dir: "departure" | "arrival" = direction === "arrival" ? "arrival" : "departure";
+    const routes = await getRoutes(from, to, dir);
     return reply.send(routes);
   } catch (err) {
     req.log.error(err);
@@ -35,5 +36,6 @@ app.listen({ port, host }, (err) => {
     process.exit(1);
   }
   // Pre-warm the cache so the first real request is instant
-  getRoutes().catch((e) => app.log.warn("Cache pre-warm failed: " + e.message));
+  getRoutes().catch((e) => app.log.warn("Cache pre-warm (dep) failed: " + e.message));
+  getRoutes(undefined, undefined, "arrival").catch((e) => app.log.warn("Cache pre-warm (arr) failed: " + e.message));
 });

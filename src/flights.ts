@@ -6,7 +6,8 @@ import {
 } from "./airports.js";
 
 const DEST_DATA_URL = "https://airport.ee/wp-json/airport/v1/destination-data";
-const FLIGHTS_URL   = "https://airport.ee/wp-json/airport/v1/flights?direction=departure";
+const FLIGHTS_URL         = "https://airport.ee/wp-json/airport/v1/flights?direction=departure";
+const ARRIVALS_URL        = "https://airport.ee/wp-json/airport/v1/flights?direction=arrival";
 
 const CACHE_TTL_MS      = 6 * 60 * 60 * 1000; // 6 h — destination-data (JSON)
 const HTML_CACHE_TTL_MS = 60 * 60 * 1000;      // 1 h — flights HTML (real-time)
@@ -61,21 +62,26 @@ interface HtmlDeparture {
   datetime: string;  // ISO-ish, e.g. "2026-03-04T15:30:00+02:00"
 }
 
-let htmlCache: { data: HtmlDeparture[]; fetchedAt: number } | null = null;
+const htmlCaches: Record<"departure" | "arrival", { data: HtmlDeparture[]; fetchedAt: number } | null> = {
+  departure: null,
+  arrival: null,
+};
 
-async function getHtmlFlights(): Promise<HtmlDeparture[]> {
-  if (htmlCache && Date.now() - htmlCache.fetchedAt < HTML_CACHE_TTL_MS) {
-    return htmlCache.data;
+async function getHtmlFlights(direction: "departure" | "arrival"): Promise<HtmlDeparture[]> {
+  const url = direction === "departure" ? FLIGHTS_URL : ARRIVALS_URL;
+  const cached = htmlCaches[direction];
+  if (cached && Date.now() - cached.fetchedAt < HTML_CACHE_TTL_MS) {
+    return cached.data;
   }
   try {
-    const res = await fetch(FLIGHTS_URL);
-    if (!res.ok) return htmlCache?.data ?? [];
+    const res = await fetch(url);
+    if (!res.ok) return htmlCaches[direction]?.data ?? [];
     const html = await res.text();
     const deps = parseFlightsHtml(html);
-    htmlCache = { data: deps, fetchedAt: Date.now() };
+    htmlCaches[direction] = { data: deps, fetchedAt: Date.now() };
     return deps;
   } catch {
-    return htmlCache?.data ?? [];
+    return htmlCaches[direction]?.data ?? [];
   }
 }
 
@@ -135,11 +141,15 @@ function formatDep(iso: string): string {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export async function getRoutes(from?: string, to?: string): Promise<Route[]> {
+export async function getRoutes(
+  from?: string,
+  to?: string,
+  direction: "departure" | "arrival" = "departure"
+): Promise<Route[]> {
   // Fetch both sources in parallel; HTML failure is non-fatal
   const [raw, htmlDeps] = await Promise.all([
     getRawFlights().catch(() => [] as ApiDestination[]),
-    getHtmlFlights(),
+    getHtmlFlights(direction),
   ]);
 
   // Key: normalised city name (lowercase). Value: accumulated route data.
@@ -156,7 +166,8 @@ export async function getRoutes(from?: string, to?: string): Promise<Route[]> {
   >();
 
   // ── Source 1: destination-data JSON ──────────────────────────────────────
-  const departures1 = raw.filter((d) => d.direction === "D");
+  const dirFilter = direction === "departure" ? "D" : "A";
+  const departures1 = raw.filter((d) => d.direction === dirFilter);
   for (const d of departures1) {
     const city = d.destination?.trim();
     if (!city) continue;

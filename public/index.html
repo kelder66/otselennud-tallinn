@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Otselennud Tallinnast</title>
+  <title>Tallinna otselennud</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -160,6 +160,87 @@
       margin-left: 6px;
     }
 
+    /* Direction toggle buttons */
+    #dir-toggle {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dir-btn {
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid #3a4060;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: transparent;
+      color: #555a70;
+    }
+
+    .dir-btn.dep.active {
+      background: rgba(74, 144, 217, 0.15);
+      border-color: #4a90d9;
+      color: #4a90d9;
+    }
+
+    .dir-btn.arr.active {
+      background: rgba(232, 131, 42, 0.15);
+      border-color: #e8832a;
+      color: #e8832a;
+    }
+
+    /* Direction badges in sidebar */
+    .dir-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      border-radius: 3px;
+      padding: 0 3px;
+      margin-left: 3px;
+      vertical-align: middle;
+    }
+
+    .dep-badge { color: #4a90d9; background: rgba(74, 144, 217, 0.15); }
+    .arr-badge { color: #e8832a; background: rgba(232, 131, 42, 0.15); }
+
+    /* Popup direction labels */
+    .popup-dir-label {
+      font-size: 0.8rem;
+      margin: 5px 0 2px;
+    }
+
+    .dep-label { color: #4a90d9; }
+    .arr-label { color: #e8832a; }
+
+    /* Map legend (rendered as Leaflet control) */
+    .map-legend {
+      background: rgba(26, 29, 39, 0.92);
+      border: 1px solid #2a2d3a;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.75rem;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #a8c4e8;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.35);
+      flex-shrink: 0;
+    }
+
     /* Loading / error */
     #loading {
       position: absolute;
@@ -248,7 +329,11 @@
 </head>
 <body>
   <header>
-    <h1>Otselennud Tallinnast</h1>
+    <h1>Tallinna otselennud</h1>
+    <div id="dir-toggle">
+      <button id="toggle-dep" class="dir-btn dep active">↗ Tallinnast</button>
+      <button id="toggle-arr" class="dir-btn arr active">↙ Tallinna</button>
+    </div>
     <span id="dest-count">laadimine...</span>
   </header>
   <div class="filter-bar">
