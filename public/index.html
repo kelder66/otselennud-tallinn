@@ -252,6 +252,62 @@
       z-index: 1000;
     }
 
+    /* Tagline banner */
+    .tagline-banner {
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+      padding: 10px 24px;
+      background: linear-gradient(100deg, #0d1a2e 0%, #112240 40%, #0f1a30 100%);
+      border-bottom: 1px solid #1e3050;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .tagline-banner::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        -55deg,
+        transparent,
+        transparent 18px,
+        rgba(74, 144, 217, 0.03) 18px,
+        rgba(74, 144, 217, 0.03) 19px
+      );
+      pointer-events: none;
+    }
+
+    .tagline-plane {
+      font-size: 1.3rem;
+      line-height: 1;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 6px rgba(74, 144, 217, 0.6));
+    }
+
+    .tagline-text {
+      font-size: 0.85rem;
+      font-style: italic;
+      color: #7ca8d4;
+      letter-spacing: 0.01em;
+      line-height: 1.4;
+    }
+
+    .tagline-text em {
+      font-style: normal;
+      color: #a8c8e8;
+      font-weight: 500;
+    }
+
+    .tagline-rule {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, rgba(74,144,217,0.25), transparent);
+      flex-shrink: 1;
+      min-width: 20px;
+    }
+
     /* Date filter bar */
     .filter-bar {
       display: flex;
@@ -336,6 +392,11 @@
     </div>
     <span id="dest-count">laadimine...</span>
   </header>
+  <div class="tagline-banner">
+    <span class="tagline-plane">✈</span>
+    <span class="tagline-text">„Eestlased reisivad sinna, kuhu <em>otse lennata saab!</em>"</span>
+    <span class="tagline-rule"></span>
+  </div>
   <div class="filter-bar">
     <span class="filter-label">Kuva lennud</span>
     <div class="date-inputs">

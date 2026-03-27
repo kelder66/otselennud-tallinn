@@ -215,14 +215,12 @@ function popupHtml(dep, arr) {
   if (dep) {
     html += `<div class="popup-dir-label dep-label">↗ Tallinnast &middot; ${dep.airlines.join(", ")}</div>`;
     if (dep.departures.length)
-      html += `<div class="popup-dates-label">Väljumised</div>
-               <div class="popup-dates">${dep.departures.join(", ")}</div>`;
+      html += `<div class="popup-dates">${dep.departures.join(", ")}</div>`;
   }
   if (arr) {
     html += `<div class="popup-dir-label arr-label">↙ Tallinna &middot; ${arr.airlines.join(", ")}</div>`;
     if (arr.departures.length)
-      html += `<div class="popup-dates-label">Saabumised</div>
-               <div class="popup-dates">${arr.departures.join(", ")}</div>`;
+      html += `<div class="popup-dates">${arr.departures.join(", ")}</div>`;
   }
   return html;
 }
