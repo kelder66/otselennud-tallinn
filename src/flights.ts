@@ -29,8 +29,8 @@ interface ApiDestination {
   id: number;
   start_date: string;
   end_date: string;
-  flight_number: string;
-  service_provider: string;
+  flight_number: string | string[];
+  service_provider: string | string[];
   direction: string;
   destination: string;
   destination_et?: string;
@@ -196,7 +196,8 @@ export async function getRoutes(
       airlines: new Set<string>(),
       departures: [],
     };
-    if (d.service_provider) entry.airlines.add(d.service_provider.trim());
+    const providers = Array.isArray(d.service_provider) ? d.service_provider : d.service_provider ? [d.service_provider] : [];
+    for (const p of providers) if (p) entry.airlines.add(p.trim());
     entry.departures.push(d.start_date);
     cityMap.set(key, entry);
   }
