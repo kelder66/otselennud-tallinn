@@ -13,14 +13,40 @@ app.register(staticPlugin, {
   prefix: "/",
 });
 
+class TimedCounter {
+  private times: number[] = [];
+  private allTime = 0;
+
+  record(): void {
+    const now = Date.now();
+    this.times.push(now);
+    this.allTime++;
+    const cutoff = now - 7 * 24 * 60 * 60 * 1000;
+    if (this.times.length > 0 && this.times[0] < cutoff) {
+      this.times = this.times.filter(t => t >= cutoff);
+    }
+  }
+
+  snapshot() {
+    const now = Date.now();
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const weekStart = now - 7 * 24 * 60 * 60 * 1000;
+    return {
+      today:    this.times.filter(t => t >= todayStart).length,
+      lastWeek: this.times.filter(t => t >= weekStart).length,
+      total:    this.allTime,
+    };
+  }
+}
+
 const upSince = new Date().toISOString();
-let apiRequests = 0;
+const requests = new TimedCounter();
 let lastRequestAt: string | null = null;
 
 app.get("/health", async () => ({ status: "ok" }));
 
 app.get("/api/routes", async (req, reply) => {
-  apiRequests++;
+  requests.record();
   lastRequestAt = new Date().toISOString();
   try {
     const { from, to, direction } = req.query as { from?: string; to?: string; direction?: string };
@@ -38,7 +64,7 @@ app.get("/stats", async (req, reply) => {
   return {
     service: "otselennud",
     upSince,
-    apiRequests,
+    requests: requests.snapshot(),
     lastRequestAt,
   };
 });
