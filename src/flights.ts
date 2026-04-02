@@ -76,7 +76,9 @@ async function getHtmlFlights(direction: "departure" | "arrival"): Promise<HtmlD
   try {
     const res = await fetch(url);
     if (!res.ok) return htmlCaches[direction]?.data ?? [];
-    const html = await res.text();
+    // API now returns JSON wrapper { html: "..." } instead of raw HTML
+    const json = await res.json() as { html?: string } | string;
+    const html = typeof json === "object" && json.html ? json.html : String(json);
     const deps = parseFlightsHtml(html);
     htmlCaches[direction] = { data: deps, fetchedAt: Date.now() };
     return deps;
@@ -87,15 +89,20 @@ async function getHtmlFlights(direction: "departure" | "arrival"): Promise<HtmlD
 
 function parseFlightsHtml(html: string): HtmlDeparture[] {
   const results: HtmlDeparture[] = [];
-  // Match each card-flight block's key fields in document order
+  // API now returns time-only datetime (e.g. "15:26"), no date.
+  // We prefix with today's date to make it sortable/filterable.
+  const today = new Date().toISOString().substring(0, 10);
   const re =
-    /datetime="([^"]+)"[\s\S]{1,600}?card-flight__title">([\s\S]{1,200}?)<\/h2>[\s\S]{1,400}?card-flight__service-providers">([\s\S]{1,200}?)<\/span>/g;
+    /datetime="([^"]+)"[\s\S]{1,600}?card-flight__title">([\s\S]{1,200}?)<\/h2>[\s\S]{1,1200}?card-flight__service-providers">([\s\S]{1,200}?)<\/span>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
-    const datetime = m[1].trim();
-    const destRaw  = stripTags(m[2]);
-    const airline  = stripTags(m[3]);
-    if (!destRaw || !datetime) continue;
+    const timeRaw = m[1].trim();
+    const destRaw = stripTags(m[2]);
+    const airline = stripTags(m[3]);
+    if (!destRaw || !timeRaw) continue;
+
+    // Build a full ISO-ish datetime so date filtering and formatDep work
+    const datetime = timeRaw.includes("T") ? timeRaw : `${today}T${timeRaw}:00`;
 
     const parenM = destRaw.match(/^(.*?)\s*\(([^)]+)\)$/);
     const city   = parenM ? parenM[1].trim() : destRaw;
@@ -169,16 +176,21 @@ export async function getRoutes(
   const dirFilter = direction === "departure" ? "D" : "A";
   const departures1 = raw.filter((d) => d.direction === dirFilter);
   for (const d of departures1) {
-    const city = d.destination?.trim();
-    if (!city) continue;
+    const destRaw = d.destination?.trim();
+    if (!destRaw) continue;
     // Date filter
     if (from && dateStr(d.start_date) < from) continue;
     if (to   && dateStr(d.start_date) > to)   continue;
 
+    // Parse "City (Airport)" format to extract airport hint for coord lookup
+    const parenM = destRaw.match(/^(.*?)\s*\(([^)]+)\)$/);
+    const city = parenM ? parenM[1].trim() : destRaw;
+    const hint = parenM ? parenM[2].trim() : null;
+
     const key = city.toLowerCase();
     const entry = cityMap.get(key) ?? {
       city,
-      hint: null,
+      hint,
       iata: d.iata,
       country: d.country,
       airlines: new Set<string>(),
