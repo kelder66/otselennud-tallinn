@@ -13,9 +13,15 @@ app.register(staticPlugin, {
   prefix: "/",
 });
 
+const upSince = new Date().toISOString();
+let apiRequests = 0;
+let lastRequestAt: string | null = null;
+
 app.get("/health", async () => ({ status: "ok" }));
 
 app.get("/api/routes", async (req, reply) => {
+  apiRequests++;
+  lastRequestAt = new Date().toISOString();
   try {
     const { from, to, direction } = req.query as { from?: string; to?: string; direction?: string };
     const dir: "departure" | "arrival" = direction === "arrival" ? "arrival" : "departure";
@@ -25,6 +31,16 @@ app.get("/api/routes", async (req, reply) => {
     req.log.error(err);
     return reply.status(500).send({ error: "Failed to fetch routes" });
   }
+});
+
+app.get("/stats", async (req, reply) => {
+  reply.header("Access-Control-Allow-Origin", "*");
+  return {
+    service: "otselennud",
+    upSince,
+    apiRequests,
+    lastRequestAt,
+  };
 });
 
 const port = Number(process.env.PORT ?? 3000);
