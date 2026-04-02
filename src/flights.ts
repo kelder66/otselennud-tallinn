@@ -127,6 +127,9 @@ function resolveCoords(
 ) {
   return (
     (iata ? lookupByIata(iata) : undefined) ??
+    // Try "City Hint" first (e.g. "Tenerife South") before just "Hint" ("South")
+    // to avoid vague hint matching wrong airports.
+    (hint ? lookupByAirportHint(`${city} ${hint}`) : undefined) ??
     (hint ? lookupByAirportHint(hint) : undefined) ??
     (country ? lookupByCityAndCountry(city, country) : undefined) ??
     lookupByCity(city)
@@ -172,6 +175,14 @@ export async function getRoutes(
     }
   >();
 
+  // Pre-build city→hint map from HTML flights regardless of date filter.
+  // This ensures cities like "Stockholm" always resolve to "Arlanda" even
+  // when the date range excludes today's HTML flights.
+  const htmlHintMap = new Map<string, string>();
+  for (const d of htmlDeps) {
+    if (d.hint) htmlHintMap.set(d.city.toLowerCase(), d.hint);
+  }
+
   // ── Source 1: destination-data JSON ──────────────────────────────────────
   const dirFilter = direction === "departure" ? "D" : "A";
   const departures1 = raw.filter((d) => d.direction === dirFilter);
@@ -188,9 +199,11 @@ export async function getRoutes(
     const hint = parenM ? parenM[2].trim() : null;
 
     const key = city.toLowerCase();
+    // Use hint from HTML hint map if the API didn't provide one
+    const resolvedHint = hint ?? htmlHintMap.get(key) ?? null;
     const entry = cityMap.get(key) ?? {
       city,
-      hint,
+      hint: resolvedHint,
       iata: d.iata,
       country: d.country,
       airlines: new Set<string>(),

@@ -13,6 +13,18 @@ export interface AirportInfo {
   lon: number;
 }
 
+// Normalize city name for lookup: lowercase + strip diacritics.
+// Handles mismatches like "Kraków" → "krakow", "Gdańsk" → "gdansk".
+function normalizeCity(city: string): string {
+  return city.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+// Override map for cities where airports.dat first-match is the wrong airport.
+// Key: normalized city name. Value: correct IATA code.
+const CITY_IATA_OVERRIDE: Record<string, string> = {
+  helsinki: "HEL", // airports.dat lists Malmi (HEM) before Vantaa (HEL)
+};
+
 // Parse airports.dat once at startup
 // Format: id,name,city,country,iata,icao,lat,lon,alt,tz,dst,tz_db,type,source
 let airportsByCity: Map<string, AirportInfo[]> | null = null;
@@ -43,7 +55,7 @@ function loadAirports(): void {
     const info: AirportInfo = { iata, name, city, country, lat, lon };
     byIata.set(iata, info);
 
-    const cityKey = city.toLowerCase();
+    const cityKey = normalizeCity(city);
     const existing = byCity.get(cityKey) ?? [];
     existing.push(info);
     byCity.set(cityKey, existing);
@@ -80,10 +92,11 @@ export function lookupByIata(iata: string): AirportInfo | undefined {
 
 export function lookupByCity(city: string): AirportInfo | undefined {
   if (!airportsByCity) loadAirports();
-  const candidates = airportsByCity!.get(city.toLowerCase());
+  const key = normalizeCity(city);
+  const override = CITY_IATA_OVERRIDE[key];
+  if (override) return lookupByIata(override);
+  const candidates = airportsByCity!.get(key);
   if (!candidates || candidates.length === 0) return undefined;
-  // Prefer the one whose name doesn't contain "International" to avoid
-  // ambiguity, but fallback to first
   return candidates[0];
 }
 
@@ -92,7 +105,7 @@ export function lookupByCityAndCountry(
   country: string
 ): AirportInfo | undefined {
   if (!airportsByCity) loadAirports();
-  const candidates = airportsByCity!.get(city.toLowerCase());
+  const candidates = airportsByCity!.get(normalizeCity(city));
   if (!candidates || candidates.length === 0) return undefined;
   const countryMatch = candidates.find(
     (a) => a.country.toLowerCase() === country.toLowerCase()
